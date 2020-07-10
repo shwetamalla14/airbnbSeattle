@@ -1,0 +1,1188 @@
+---
+title : "Airbnb Seattle Market, An Exploratory & Predictive Analysis"
+output:
+  html_notebook: default
+  pdf_document:
+    latex_engine: xelatex
+  word_document: default
+always_allow_html: yes
+---
+# Market Assigned to the team :  SEATTLE
+<br>
+
+##### "We, the undersigned, certify that the report submitted is our own original work; all authors participated in the work in a substantiative way; all authors have seen and approved the report as submitted; the text, images, illustrations, and other items included in the manuscript do not carry any infringement / plagiarism issue upon any existing copyrighted materials."
+
+<br>
+
+<table border = "1"><thead>
+<tr> 
+<th> <tr> <td></td> <td> **Names of the signed team members** </td></tr></thead>
+<tbody align = center>
+  <tr > <td> Contact Member </td> <td> &ensp; Shweta Malla </td> </tr>
+  <tr> <td> Team Member 1 </td> <td> &ensp;    Ankita Mittal </td> </tr>
+  <tr> <td>  Team Member 2  </td> <td>&ensp;    Umang Patel </td> </tr>
+  <tr> <td>  Team Member 3  </td> <td>&ensp;   Avinav Dixit </td> </tr>
+  <tr> <td> Team Member 4 </td> <td>&ensp;    Kumar Saket </td> </tr>
+</tbody>
+</table>
+
+
+```{r setup, include=FALSE}
+# knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("wordcloud")
+install.packages("tm")
+install.packages("tmap")
+```
+```{r}
+install.packages("RColorBrewer")
+```
+
+
+```{r}
+library(stringr)
+library(tidyr)
+library(mice)
+library(dplyr)
+library(mice)
+library(randomForest)
+library(tidyverse)
+library(tidymodels)
+library(caret)
+library(skimr)
+library(plotly)
+library(leaflet)
+library(widgetframe)
+library(bs4Dash)
+library(Imap)
+library(tidytext)
+library(wordcloud)
+library(lubridate)
+```
+
+### **METHODOLOGY**
+
+The dataset provided to us was was not clean and we had to skim through the data. We had to go through each column and replace the NA values. In some cases we had to replace the missing values with the mean and in some cases with the median whereas in others we had to replace them with a 0 or FALSE, example host_is_superhost, cleaning_fee. (We performed EDA on various variables to see the relation with higher booking rate. We did a lot of research on the airbnb website as well as through external sources. We used the data dictionary to understand the variables and built our research on that. We used the skim and str function to understand our variables. We ran regression to see what variables that were significant for us. We then used those in our final model, xgboost, which gave us the highest accuracy. We also included some variables which we thought were important after our online research. (For determining whether a property will have a higher booking rate, we put ourselves in the shoes of the customer booking an airbnb property. We confirmed our thinking through online research. After running our model on the entire data on kaggle, we achieved an accuracy of 89% using random forest. We then decided to test the model only on our Seattle data. We ran Knn, logistic, random forest and xgBoost for our Seattle dataset. The xgboost which used mostly numeric and logical variables, performed the best with an accuracy of 95%. We have used various text mining techniques and predictive models in our data. XGBoost offers several advanced features for model tuning, computing environments and algorithm enhancement. The algorithm efficiently reduces computing time and allocates an optimal usage of memory resources on the system. This model creates a strong model based on weak classifiers. This helps improve the accuracy. We optimized the parameters of this model to our dataset to achieve this.
+
+
+
+
+
+
+```{r}
+dfAirbnbTrainSeattle<- read_csv("AirbnbSeattleTrain.csv")
+dfAirbnbTestSeattle <- read_csv("AirbnbSeattleTest.csv")
+```
+```{r}
+table(dfAirbnbTrainSeattle$market)
+```
+
+```{r}
+skim(dfAirbnbTrainSeattle)
+```
+
+
+```{r}
+#Availibility_365
+#it's clean
+dfAirbnbTrainSeattle$availability_365 <- as.numeric(dfAirbnbTrainSeattle$availability_365)
+dfAirbnbTestSeattle$availability_365 <- as.numeric(dfAirbnbTestSeattle$availability_365)
+
+```
+
+```{r}
+#amenities_count
+dfAirbnbTrainSeattle$amenities_count<- 
+  sapply(dfAirbnbTrainSeattle$amenities, function(x) length(unlist(strsplit(as.character(x), ','))))
+
+dfAirbnbTestSeattle$amenities_count<- 
+  sapply(dfAirbnbTestSeattle$amenities, function(x) length(unlist(strsplit(as.character(x), ','))))
+```
+
+
+```{r}
+#host_verifications_count
+dfAirbnbTrainSeattle$host_verification_count <-
+  sapply(dfAirbnbTrainSeattle$host_verifications, function(x) length(unlist(strsplit(as.character(x), ','))))
+
+dfAirbnbTestSeattle$host_verification_count <-
+  sapply(dfAirbnbTestSeattle$host_verifications, function(x) length(unlist(strsplit(as.character(x), ','))))
+```
+
+```{r}
+#host_age
+dfAirbnbTrainSeattle$host_since <- as.Date(dfAirbnbTrainSeattle$host_since)
+dfAirbnbTrainSeattle$host_age <- as.integer(difftime(Sys.Date(), dfAirbnbTrainSeattle$host_since, units = 'weeks'))
+summary(dfAirbnbTrainSeattle$host_age)
+dfAirbnbTrainSeattle$host_age[is.na(dfAirbnbTrainSeattle$host_age)] <- 301.6
+
+
+dfAirbnbTestSeattle$host_since <- as.Date(dfAirbnbTestSeattle$host_since)
+dfAirbnbTestSeattle$host_age <- as.integer(difftime(Sys.Date(), dfAirbnbTestSeattle$host_since, units = 'weeks'))
+summary(dfAirbnbTestSeattle$host_age)
+dfAirbnbTestSeattle$host_age[is.na(dfAirbnbTestSeattle$host_age)] <- 301.6
+```
+
+```{r}
+#Bathrooms
+dfAirbnbTrainSeattle$bathrooms <- as.numeric(dfAirbnbTrainSeattle$bathrooms)
+dfAirbnbTestSeattle$bathrooms <- as.numeric(dfAirbnbTestSeattle$bathrooms)
+summary(dfAirbnbTrainSeattle$bathrooms)
+table(dfAirbnbTrainSeattle$bathrooms)
+```
+
+```{r}
+#Bed_Type
+
+table(dfAirbnbTrainSeattle$bed_type)
+dfAirbnbTrainSeattle$bed_type <- as.character(dfAirbnbTrainSeattle$bed_type)
+dfAirbnbTrainSeattle$bed_type[dfAirbnbTrainSeattle$bed_type == ''] <- 'Airbed'
+dfAirbnbTrainSeattle$bed_type[dfAirbnbTrainSeattle$bed_type == '100%'] <- 'Airbed'
+dfAirbnbTrainSeattle$bed_type[dfAirbnbTrainSeattle$bed_type == '81%'] <- 'Airbed'
+dfAirbnbTrainSeattle$bed_type <- as.factor(dfAirbnbTrainSeattle$bed_type)
+
+dfAirbnbTestSeattle$bed_type <- as.character(dfAirbnbTestSeattle$bed_type)
+dfAirbnbTestSeattle$bed_type[dfAirbnbTestSeattle$bed_type == ''] <- 'Airbed'
+dfAirbnbTestSeattle$bed_type[dfAirbnbTestSeattle$bed_type == '100%'] <- 'Airbed'
+dfAirbnbTestSeattle$bed_type[dfAirbnbTestSeattle$bed_type == '81%'] <- 'Airbed'
+dfAirbnbTestSeattle$bed_type <- as.factor(dfAirbnbTestSeattle$bed_type)
+
+```
+
+```{r}
+#bedrooms
+#Mean = 1.36
+dfAirbnbTrainSeattle$bedrooms <- as.numeric(dfAirbnbTrainSeattle$bedrooms)
+dfAirbnbTrainSeattle$bedrooms[is.na(dfAirbnbTrainSeattle$bedrooms)] <- 3.5
+summary(dfAirbnbTrainSeattle$bedrooms)
+table(dfAirbnbTrainSeattle$bedrooms)
+
+dfAirbnbTestSeattle$bedrooms <- as.numeric(dfAirbnbTestSeattle$bedrooms)
+dfAirbnbTestSeattle$bedrooms[is.na(dfAirbnbTestSeattle$bedrooms)] <- 3.5
+
+
+```
+
+
+```{r}
+#beds
+
+summary(dfAirbnbTrainSeattle$beds)
+dfAirbnbTrainSeattle$beds <- as.numeric(dfAirbnbTrainSeattle$beds)
+table(dfAirbnbTrainSeattle$beds)
+
+dfAirbnbTestSeattle$beds <- as.numeric(dfAirbnbTestSeattle$beds)
+
+```
+
+```{r}
+#host_identity_Verified
+
+table(dfAirbnbTrainSeattle$host_identity_verified)
+dfAirbnbTrainSeattle$host_identity_verified <- as.character(dfAirbnbTrainSeattle$host_identity_verified)
+dfAirbnbTrainSeattle$host_identity_verified[dfAirbnbTrainSeattle$host_identity_verified == ''] <- 'TRUE'
+dfAirbnbTrainSeattle$host_identity_verified[dfAirbnbTrainSeattle$host_identity_verified == '$2,960.00'] <- 'TRUE'
+dfAirbnbTrainSeattle$host_identity_verified[dfAirbnbTrainSeattle$host_identity_verified == '$3,200.00'] <- 'TRUE'
+dfAirbnbTrainSeattle$host_identity_verified[dfAirbnbTrainSeattle$host_identity_verified == '$8,500.00'] <- 'TRUE'
+
+summary(dfAirbnbTrainSeattle$host_identity_verified)
+
+dfAirbnbTrainSeattle$host_identity_verified <- as.factor(dfAirbnbTrainSeattle$host_identity_verified)
+
+levels(dfAirbnbTrainSeattle$host_identity_verified)
+
+
+dfAirbnbTestSeattle$host_identity_verified <- as.character(dfAirbnbTestSeattle$host_identity_verified)
+dfAirbnbTestSeattle$host_identity_verified[dfAirbnbTestSeattle$host_identity_verified == ''] <- 'TRUE'
+dfAirbnbTestSeattle$host_identity_verified[dfAirbnbTestSeattle$host_identity_verified == '$2,960.00'] <- 'TRUE'
+dfAirbnbTestSeattle$host_identity_verified[dfAirbnbTestSeattle$host_identity_verified == '$3,200.00'] <- 'TRUE'
+dfAirbnbTestSeattle$host_identity_verified[dfAirbnbTestSeattle$host_identity_verified == '$8,500.00'] <- 'TRUE'
+
+
+dfAirbnbTestSeattle$host_identity_verified <- as.factor(dfAirbnbTestSeattle$host_identity_verified)
+
+```
+
+
+```{r}
+#host_is_superhost
+
+summary(dfAirbnbTrainSeattle$host_is_superhost)
+dfAirbnbTrainSeattle$host_is_superhost <- as.character(dfAirbnbTrainSeattle$host_is_superhost)
+table(dfAirbnbTrainSeattle$host_is_superhost)
+dfAirbnbTrainSeattle$host_is_superhost <- ifelse(dfAirbnbTrainSeattle$host_is_superhost == 'FALSE', 'FALSE', 'TRUE')
+dfAirbnbTrainSeattle$host_is_superhost <- as.factor(dfAirbnbTrainSeattle$host_is_superhost)
+
+
+dfAirbnbTestSeattle$host_is_superhost <- as.character(dfAirbnbTestSeattle$host_is_superhost)
+table(dfAirbnbTestSeattle$host_is_superhost)
+dfAirbnbTestSeattle$host_is_superhost <- ifelse(dfAirbnbTestSeattle$host_is_superhost == 'FALSE', 'FALSE', 'TRUE')
+dfAirbnbTestSeattle$host_is_superhost <- as.factor(dfAirbnbTestSeattle$host_is_superhost)
+```
+
+```{r}
+#host_listings_count
+
+summary(dfAirbnbTrainSeattle$host_listings_count)
+dfAirbnbTrainSeattle$host_listings_count <- as.numeric(dfAirbnbTrainSeattle$host_listings_count)
+dfAirbnbTestSeattle$host_listings_count <- as.numeric(dfAirbnbTestSeattle$host_listings_count)
+```
+
+
+```{r}
+#maximum_nights
+
+summary(dfAirbnbTrainSeattle$maximum_nights)
+dfAirbnbTrainSeattle$maximum_nights <- as.numeric(dfAirbnbTrainSeattle$maximum_nights)
+table(dfAirbnbTrainSeattle$maximum_nights)
+dfAirbnbTrainSeattle$maximum_nights[dfAirbnbTrainSeattle$maximum_nights > 1125] <- 1125
+dfAirbnbTrainSeattle$maximum_nights[is.na(dfAirbnbTrainSeattle$maximum_nights)] <- 668
+
+
+dfAirbnbTestSeattle$maximum_nights <- as.numeric(dfAirbnbTestSeattle$maximum_nights)
+table(dfAirbnbTestSeattle$maximum_nights)
+dfAirbnbTestSeattle$maximum_nights[dfAirbnbTestSeattle$maximum_nights > 1125] <- 1125
+dfAirbnbTestSeattle$maximum_nights[is.na(dfAirbnbTestSeattle$maximum_nights)] <- 668
+```
+
+```{r}
+#minimum_nights
+dfAirbnbTrainSeattle$minimum_nights<- as.numeric(dfAirbnbTrainSeattle$minimum_nights)
+summary(dfAirbnbTrainSeattle$minimum_nights)
+table(dfAirbnbTrainSeattle$minimum_nights)
+dfAirbnbTrainSeattle$minimum_nights[is.na(dfAirbnbTrainSeattle$minimum_nights)] <- 1
+dfAirbnbTrainSeattle$minimum_nights[dfAirbnbTrainSeattle$minimum_nights == 0] <- 1
+dfAirbnbTrainSeattle$minimum_nights[dfAirbnbTrainSeattle$minimum_nights == 100000000] <- 1
+
+
+dfAirbnbTestSeattle$minimum_nights<- as.numeric(dfAirbnbTestSeattle$minimum_nights)
+summary(dfAirbnbTestSeattle$minimum_nights)
+table(dfAirbnbTestSeattle$minimum_nights)
+dfAirbnbTestSeattle$minimum_nights[is.na(dfAirbnbTestSeattle$minimum_nights)] <- 1
+dfAirbnbTestSeattle$minimum_nights[dfAirbnbTestSeattle$minimum_nights == 0] <- 1
+dfAirbnbTestSeattle$minimum_nights[dfAirbnbTestSeattle$minimum_nights == 100000000] <- 1
+```
+
+```{r}
+#price
+
+
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>% 
+                      mutate(price = as.numeric(str_replace_all(dfAirbnbTrainSeattle$price,"[$,]",'')))
+
+meanPrice <- mean(dfAirbnbTrainSeattle$price, na.rm = TRUE)
+
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>%
+                    mutate(price = replace_na(price, meanPrice))
+
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>% 
+                      mutate(price = as.numeric(str_replace_all(dfAirbnbTestSeattle$price,"[$,]",'')))
+
+meanPrice <- mean(dfAirbnbTestSeattle$price, na.rm = TRUE)
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>%
+                    mutate(price = replace_na(price, meanPrice))
+```
+
+
+
+```{r}
+#dfAirbnbTrainSeattle$high_booking_rate <- dfAirbnbTrainSeattle_train_y$high_booking_rate
+dfAirbnbTrainSeattle$high_booking_rate <- as.factor(dfAirbnbTrainSeattle$high_booking_rate)
+
+```
+
+
+```{r}
+# Final code for transformation of cleaning fee
+
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>% 
+                      mutate(cleaning_fee = as.numeric(str_replace_all(dfAirbnbTrainSeattle$cleaning_fee,"[$,]",'')))
+
+meanCleaningFee <- mean(dfAirbnbTrainSeattle$cleaning_fee, na.rm = TRUE)
+
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>%
+                    mutate(cleaning_fee = replace_na(cleaning_fee, meanCleaningFee))
+
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>% 
+                      mutate(cleaning_fee = as.numeric(str_replace_all(dfAirbnbTestSeattle$cleaning_fee,"[$,]",'')))
+
+meanCleaningFee <- mean(dfAirbnbTestSeattle$cleaning_fee, na.rm = TRUE)
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>%
+                    mutate(cleaning_fee = replace_na(cleaning_fee, meanCleaningFee))
+
+```
+
+```{r}
+# Final code for transformation of extra people 
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>% 
+                      mutate(extra_people = as.numeric(str_replace_all(dfAirbnbTrainSeattle$extra_people,"[$,]",'')))
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>% 
+                      mutate(extra_people = as.numeric(str_replace_all(dfAirbnbTestSeattle$extra_people,"[$,]",'')))
+```
+
+```{r}
+#guests_included 
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>%
+  mutate(guests_included=as.numeric(str_replace_all(dfAirbnbTrainSeattle$guests_included,"[,%]",'')))
+
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>% 
+  mutate(guests_included = ifelse(guests_included%in% c("17", "18", "19","20", "21", "22", "24", "25", "28", "30", "32", "34"), "Other", guests_included))
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>%
+  mutate(guests_included=as.numeric(str_replace_all(dfAirbnbTestSeattle$guests_included,"[,%]",'')))
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>% 
+  mutate(guests_included = ifelse(guests_included%in% c("17", "18", "19","20", "21", "22", "24", "25", "28", "30", "32", "34"), "Other", guests_included))
+```
+
+```{r}
+#host_response_rate
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>% 
+                      mutate(host_response_rate = as.numeric(str_replace_all(dfAirbnbTrainSeattle$host_response_rate,"[,%]",'')))
+
+meanRespRate <- mean(dfAirbnbTrainSeattle$host_response_rate, na.rm = TRUE)
+
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>%
+                    mutate(host_response_rate = replace_na(host_response_rate, meanRespRate))
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>% 
+                      mutate(host_response_rate = as.numeric(str_replace_all(dfAirbnbTestSeattle$host_response_rate,"[,%]",'')))
+
+meanRespRate <- mean(dfAirbnbTestSeattle$host_response_rate, na.rm = TRUE)
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>%
+                    mutate(host_response_rate = replace_na(host_response_rate, meanRespRate))
+
+
+```
+
+```{r}
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>% 
+  mutate(property_type = ifelse(property_type %in% c("Castle", "Igloo", "Treehouse", "Cave", "Dome house", "In-law", "Nature lodge", "Tipi", "Vacation home", "Barn", "Campsite", "Chalet", "Dorm", "Houseboat", "Island", "Bus", "Casa particular (Cuba)", "Earth house", "Hut", "Lighthouse", "Pension (South Korea)", "Timeshare", "Train", "Yurt"), "Other", property_type))
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>% 
+  mutate(property_type = ifelse(property_type %in% c("Castle", "Igloo", "Minsu (Taiwan)", "Treehouse", "Cave", "Dome house", "In-law", "Nature lodge", "Tipi", "Tent", "Vacation home", "Barn", "Campsite", "Chalet", "Dorm", "Houseboat", "Island", "Bus", "Casa particular (Cuba)", "Earth house", "Hut", "Lighthouse", "Pension (South Korea)", "Timeshare", "Train", "Yurt"), "Other", property_type))
+
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>% 
+  mutate(cancellation_policy = ifelse(cancellation_policy %in% c("luxury_super_strict_125", "luxury_super_strict_95", "luxury_no_refund"), "Other", cancellation_policy))
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>% 
+  mutate(cancellation_policy = ifelse(cancellation_policy %in% c("luxury_super_strict_125", "luxury_moderate",  "luxury_super_strict_95", "luxury_no_refund"), "Other", cancellation_policy))
+
+dfAirbnbTestSeattle$property_type <- as.factor(dfAirbnbTestSeattle$property_type)
+```
+
+```{r}
+# Final code for transformation of security deposit
+dfAirbnbTrainSeattle <-  dfAirbnbTrainSeattle %>% 
+                      mutate(security_deposit = as.numeric(str_replace_all(dfAirbnbTrainSeattle$security_deposit,"[$,]",'')))
+
+meanSecurtityDeposit <- mean(dfAirbnbTrainSeattle$security_deposit, na.rm = TRUE)
+
+dfAirbnbTrainSeattle <-  dfAirbnbTrainSeattle %>%
+                    mutate(security_deposit = replace_na(security_deposit, meanSecurtityDeposit))
+
+```
+
+
+```{r}
+
+
+dfAirbnbTrainSeattle$bed_type<-as.factor(dfAirbnbTrainSeattle$bed_type)
+dfAirbnbTrainSeattle$host_identity_verified<-as.factor(dfAirbnbTrainSeattle$host_identity_verified)
+dfAirbnbTrainSeattle$host_is_superhost<-as.factor(dfAirbnbTrainSeattle$host_is_superhost)
+dfAirbnbTrainSeattle$market<-as.factor(dfAirbnbTrainSeattle$market)
+dfAirbnbTrainSeattle$instant_bookable<-as.factor(dfAirbnbTrainSeattle$instant_bookable)
+dfAirbnbTrainSeattle$is_location_exact<-as.factor(dfAirbnbTrainSeattle$is_location_exact)
+dfAirbnbTrainSeattle$property_type<-as.factor(dfAirbnbTrainSeattle$property_type)
+dfAirbnbTrainSeattle$requires_license<-as.factor(dfAirbnbTrainSeattle$requires_license)
+
+```
+
+```{r}
+dfAirbnbTrainSeattle$availability_365<- as.factor(dfAirbnbTrainSeattle$availability_365)
+dfAirbnbTrainSeattle$bathrooms<-as.factor(dfAirbnbTrainSeattle$bathrooms)
+dfAirbnbTrainSeattle$bed_type<-as.factor(dfAirbnbTrainSeattle$bed_type)
+dfAirbnbTrainSeattle$host_identity_verified<-as.factor(dfAirbnbTrainSeattle$host_identity_verified)
+dfAirbnbTrainSeattle$host_is_superhost<-as.factor(dfAirbnbTrainSeattle$host_is_superhost)
+dfAirbnbTrainSeattle$host_listings_count<-as.factor(dfAirbnbTrainSeattle$host_listings_count)
+dfAirbnbTrainSeattle$price<-as.factor(dfAirbnbTrainSeattle$price)
+dfAirbnbTrainSeattle$cleaning_fee<-as.factor(dfAirbnbTrainSeattle$cleaning_fee)
+dfAirbnbTrainSeattle$market<-as.factor(dfAirbnbTrainSeattle$market)
+dfAirbnbTrainSeattle$guests_included<-as.factor(dfAirbnbTrainSeattle$guests_included)
+dfAirbnbTrainSeattle$minimum_nights<-as.factor(dfAirbnbTrainSeattle$minimum_nights)
+dfAirbnbTrainSeattle$amenities_count<-as.factor(dfAirbnbTrainSeattle$amenities_count)
+# dfAirbnbTrainSeattle$host_verification_count<-as.factor(head(dfAirbnbTrainSeattle)$host_verification_count)
+dfAirbnbTrainSeattle$host_age<-as.factor(dfAirbnbTrainSeattle$host_age)
+dfAirbnbTrainSeattle$host_response_rate<-as.factor(dfAirbnbTrainSeattle$host_response_rate)
+dfAirbnbTrainSeattle$instant_bookable<-as.factor(dfAirbnbTrainSeattle$instant_bookable)
+dfAirbnbTrainSeattle$is_location_exact<-as.factor(dfAirbnbTrainSeattle$is_location_exact)
+dfAirbnbTrainSeattle$market<-as.factor(dfAirbnbTrainSeattle$market)
+dfAirbnbTrainSeattle$property_type<-as.factor(dfAirbnbTrainSeattle$property_type)
+dfAirbnbTrainSeattle$requires_license<-as.factor(dfAirbnbTrainSeattle$requires_license)
+```
+
+```{r}
+# Final code for transformation of monthly price
+
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>% 
+                      mutate(monthly_price = as.numeric(str_replace_all(dfAirbnbTrainSeattle$monthly_price,"[$,]",'')))
+
+meanMonthly_price <- mean(dfAirbnbTrainSeattle$monthly_price, na.rm = TRUE)
+
+
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>%
+                    mutate(monthly_price = replace_na(monthly_price, meanMonthly_price))
+```
+
+```{r}
+# Final code for transformation of monthly price
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>% 
+                      mutate(monthly_price = as.numeric(str_replace_all(dfAirbnbTestSeattle$monthly_price,"[$,]",'')))
+
+meanMonthly_price <- mean(dfAirbnbTestSeattle$cleaning_fee, na.rm = TRUE)
+
+
+dfAirbnbTestSeattle <- dfAirbnbTestSeattle %>%
+                    mutate(monthly_price = replace_na(monthly_price, meanMonthly_price))
+```
+
+```{r}
+dfAirbnbTrainSeattle %>% 
+                      leaflet() %>%
+                      addProviderTiles(provider = "CartoDB.Positron") %>%
+                      addCircleMarkers(color = "cyan", radius = 0.5, weight = 0.1) %>%
+                      setView(zoom = 12, lat = 47.615258, lng = -122.335892)
+```
+
+###The map shows the location of listings in Seattle.As can be seen most of the listings are from central seattle.
+
+```{r}
+dfAirbnbTrainSeattle %>% 
+                      group_by(neighbourhood) %>% 
+                      leaflet() %>%
+                      addTiles() %>%
+                      addCircleMarkers(clusterOptions = markerClusterOptions(), label = ~price) %>%
+                      setView(zoom = 12, lat = 47.615258, lng = -122.335892) 
+
+```
+
+###The map here shows number of listings in the respective neighborhood, and we found the top neighborhoods in terms of proerties listed.
+
+
+
+
+
+```{r}
+dfBestNeighbourhood <- dfAirbnbTrainSeattle %>% 
+  filter(neighbourhood %in% c("Wallingford", "South Lake Union", "Queen Anne", "Minor","Pike Place Market","First Hill", "Central Business District","Capitol Hill", "Belltown", "Ballard")) 
+```
+
+```{r}
+dfBestNeighbourhood <- 
+    dfBestNeighbourhood %>% 
+      mutate(minimum_nights = as.double(minimum_nights),
+             weekly_price = as.double(weekly_price),
+             availability_365 = as.double(availability_365))
+```
+
+
+```{r}
+dfBestNSummary <- dfBestNeighbourhood %>% 
+  group_by(neighbourhood) %>% 
+  mutate(meanMonthlyPrice = mean(monthly_price), meanAvailability_30 = mean(availability_30), meanAvailability_60 = mean(availability_60), meanAvailability_90 = mean(availability_90), meanAvailability_365 = mean(availability_365), meanMinimum_nights = mean(minimum_nights),
+         meanBeds = mean(beds),
+         meanSquareFeet = mean(square_feet),
+         meanExtraPeople = mean(extra_people))
+
+
+dfBestNSummary %>% 
+  group_by(neighbourhood,meanAvailability_30) %>% 
+  select(neighbourhood,meanAvailability_30)
+```
+
+
+```{r}
+
+# Cleaning Fee vs Booking Rate
+plot <- dfAirbnbTrainSeattle %>% 
+  ggplot(aes(high_booking_rate, cleaning_fee, fill = high_booking_rate)) + geom_boxplot() + labs(x = "High Booking Rate", y = "Cleaning Fee", title = "Cleaning Fee by Booking Rate")
+plot
+
+```
+###It can be seen that as the cleaning fee charges increase which contribute to increase in the rent of the property, the booking rate decreases.
+
+```{r}
+
+#Amenities Frequency
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>% 
+  mutate(amenities = gsub("[{}\"]", "", amenities))
+
+tokens <- str_split(as.character(dfAirbnbTrainSeattle$amenities), ',')
+
+amenitiesCountdf <- as.data.frame(table(unlist(tokens))) %>% arrange(desc(Freq))
+amenitiesCountdf
+
+```
+
+###The top 10 amenties provided at the rentals listed with Airbnb, Wifi is provided by the almost all the hosts and luxury amaenties likeski-in/ski-out and Tennis court only provied by one host.
+
+```{r}
+
+#Amenities Word Cloud
+dfAirbnbTrainSeattle <- dfAirbnbTrainSeattle %>% 
+  mutate(amenities = gsub("[{}\"]", "", amenities))
+tokens <- str_split(as.character(dfAirbnbTrainSeattle$amenities), ',')
+amenitiesCountdf <- as.data.frame(table(unlist(tokens))) %>% arrange(desc(Freq))
+
+set.seed(123)
+wordcloud(words = amenitiesCountdf$Var1, freq = amenitiesCountdf$Freq, min.freq = 1, max.words=75, random.order=FALSE, rot.per=0.35, colors=brewer.pal(8, "Dark2"))
+
+```
+```{r}
+install.packages("corpus")
+```
+
+```{r}
+library(corpus)
+```
+
+
+```{r}
+
+# Neighborhood Overview Word Cloud
+corpus <- Corpus(VectorSource(dfAirbnbTrainSeattle$neighborhood_overview))
+corpus = tm_map(corpus, PlainTextDocument)
+corpus = tm_map(corpus, tolower)
+corpus = tm_map(corpus, removePunctuation)
+corpus = tm_map(corpus, removeWords, c("seattle", "please", "will", "use", "'re one", "guests", "house", "allowed", "keep", "can", "take", "like", "per", "make", "neighborhood", stopwords("english")))
+corpus = tm_map(corpus, stripWhitespace)
+dtm <- TermDocumentMatrix(corpus)
+matrix <- as.matrix(dtm)
+words <- sort(rowSums(matrix), decreasing=TRUE)
+wordCountdf <- data.frame(word = names(words), freq = words)
+set.seed(123)
+wordcloud(words = wordCountdf$word, freq = wordCountdf$freq, min.freq = 1, max.words=49, rot.per=0.35, random.order=FALSE, colors=brewer.pal(8, "Dark2"))
+
+```
+
+```{r}
+
+# Transit Word Cloud
+corpus <- Corpus(VectorSource(dfAirbnbTrainSeattle$transit))
+corpus = tm_map(corpus, PlainTextDocument)
+corpus = tm_map(corpus, tolower)
+corpus = tm_map(corpus, removePunctuation)
+corpus = tm_map(corpus, removeWords, c("seattle", "please", "will", "use", "'re one", "guests", "house", "allowed", "keep", "can", "take", "like", "per", "make", "neighborhood", stopwords("english")))
+corpus = tm_map(corpus, stripWhitespace)
+dtm <- TermDocumentMatrix(corpus)
+matrix <- as.matrix(dtm)
+words <- sort(rowSums(matrix), decreasing=TRUE)
+wordCountdf <- data.frame(word = names(words), freq = words)
+set.seed(123)
+wordcloud(words = wordCountdf$word, freq = wordCountdf$freq, min.freq = 1, max.words=100, rot.per=0.35, random.order=FALSE, colors=brewer.pal(8, "Dark2"))
+
+```
+
+```{r}
+
+#Cancellation Policy 
+
+dfAirbnbTrainSeattleCancellationPolicy<- dfAirbnbTrainSeattle %>% select(price, cancellation_policy)
+
+text_cancellation_policy <- tibble(text =dfAirbnbTrainSeattleCancellationPolicy$cancellation_policy, price=dfAirbnbTrainSeattleCancellationPolicy$price)
+
+word_cancellation_policy <- text_cancellation_policy %>% 
+  unnest_tokens(word, text)
+
+data(stop_words)
+word_cancellation_policy <- word_cancellation_policy %>% 
+  anti_join(stop_words)
+
+count_cancellation_policy <- word_cancellation_policy %>% count(word, sort=TRUE) 
+count_cancellation_policy
+```
+
+
+
+
+```{r}
+#to split host_since into year, month and day
+ 
+dfAirbnbSeattleTrain1 <-dfAirbnbTrainSeattle             
+any(is.na(dfAirbnbSeattleTrain1$host_since))
+sum(is.na(dfAirbnbSeattleTrain1$host_since))
+nrow(dfAirbnbSeattleTrain1)
+na<-which(!complete.cases( dfAirbnbSeattleTrain1 $host_since))
+dfAirbnbSeattleTrain1 <-  dfAirbnbSeattleTrain1 [-na,]
+any(is.na( dfAirbnbSeattleTrain1 $host_since))
+str( dfAirbnbSeattleTrain1 $host_since)
+```
+```{r}
+library(data.table)
+setDT(dfAirbnbSeattleTrain1)[, Month_Year := format(as.Date(host_since), "%Y-%m")]
+dfAirbnbSeattleTrain1<-dfAirbnbSeattleTrain1 %>%
+  dplyr::mutate(year = lubridate::year(host_since), 
+                month = lubridate::month(host_since), 
+                day = lubridate::day(host_since))
+library(tsibble)
+dfAirbnbSeattleTrain1$Month_Year2 <- yearmonth(dfAirbnbSeattleTrain1$host_since)
+#str(dfAirbnbSeattleTrain1)
+```
+
+
+```{r} 
+#In which year maximum number of people joined Airbnb
+ dfAirbnbSeattleTrain1 %>%
+  group_by(year) %>%
+  tally() %>% 
+  mutate(pct = 100*n/sum(n)) %>% 
+  arrange(desc(pct))
+```
+
+### Most of the hosts joined Airbnb in the year 2015 which decreased to 6.09% by the year2019. This could be attributed to strong  in-migration and low inventory of reasonably priced housing available for sale contributed to rising rental demand since 2010(~1.79%).As lenders became more and more confident in the economic recovery builders responded by significantly increasing apartment  construction.
+###In 2015, permitting increased by 33 percent, followed by 14,700 multifamily units permitted in 2016. Of the estimated 20,800 unit under construction, ~ 40% were in the Downtown/ Capitol Hill/Queen Anne market area, which includes the neighborhoods encompassing Amazon.com campuses.
+###These then prevailing conditions must have motivated to invest in available business options.
+
+```{r} 
+#during which particular months of the year did hosts preferred joining
+ dfAirbnbSeattleTrain1 %>%
+  group_by(Month_Year2) %>%
+  tally() %>% 
+  mutate(pct = 100*n/sum(n)) %>% 
+  arrange(desc(pct))
+``` 
+
+### A large number of people joined Airbnb as host in August 2013. In 2013 Forbes,ranked Seattle No. 9 on its list of the Best Places for Business and Careers.Seattle was economically the fastest growing city in 2013. These then prevailing economically sound conditions must have encouraged the property owners to leverage them. 
+
+
+```{r}
+#amenities_count  on booking rate
+
+plot5<- dfAirbnbTrainSeattle%>%
+  ggplot(aes(y= amenities_count, x= as.factor(high_booking_rate),fill = high_booking_rate) )+ geom_boxplot()+ labs(x = "High Booking Rate", y = "Amenities_count", title = "Effect of number of amenities on Booking Rate")
+plot5
+```
+
+### For properties listed on Airbnb as the number of amenities offered increases the booking rate also increase.
+
+###The effect of Security deposit on high booking rate 
+
+```{r} 
+#security deposit on booking rate
+ dfAirbnbTrainSeattle %>%
+  group_by(security_deposit) %>%
+  filter(high_booking_rate==1)%>%
+  tally()%>% 
+  mutate(pct = 100*n/sum(n)) %>% 
+  arrange(desc(pct))
+
+```
+
+
+```{r}
+ 
+plot4<- dfAirbnbTrainSeattle%>%
+  ggplot(aes(y= security_deposit, x= as.factor(high_booking_rate),fill = high_booking_rate) )+ geom_boxplot()+ labs(x = "High Booking Rate", y = "Security Deposit", title = "Security Deposit by Booking Rate")
+plot4
+```
+
+
+### As the secutity deposit for a property increase the booking rate decreases.But the impact is not significantly distingusable on high booking rate as it is almost comparable. 
+
+
+```{r}
+# determine range of monthly price distribution across neighborhoods
+ dfAirbnbTrainSeattle %>%
+  group_by(neighbourhood) %>%
+  filter(monthly_price >5000)%>%
+  tally()%>% 
+  mutate(pct = 100*n/sum(n)) %>% 
+  arrange(desc(pct))
+```
+
+
+### According to the given dataset 13% of the most Expensive rentals(monthly_price>5000) are located in Capitol hill as well. The maximum rent for a property listed is 36000 dollars in Ballard. 
+
+```{r}
+# monthly_price of top neighborhood listings across years(after joining)
+dfBestNeighbourhood1 <- dfBestNeighbourhood
+dfBestNeighbourhood1$Month_Year <- yearmonth(dfBestNeighbourhood1$host_since)
+plot3<- dfBestNeighbourhood1%>%
+ 
+  ggplot(aes(x= Month_Year, y= monthly_price))+ geom_line(color=  "#00AFBB", size = 2)
+plot3
+```
+
+### no significant observations.
+
+```{r} 
+ dfAirbnbTrainSeattle %>%
+  group_by(neighbourhood) %>%
+  filter(high_booking_rate==1)%>%
+  tally()%>% 
+  mutate(pct = 100*n/sum(n)) %>% 
+  arrange(desc(pct))
+
+```
+
+### Listings in Capitol Hill contributes maximum to the properties with high booking rate.
+
+
+
+```{r}
+#"Property Types in Top Neighborhoods in Seattle
+dfAirbnbSeattlePrpTyp <- dfAirbnbTrainSeattle %>% group_by(neighbourhood,property_type) %>% summarize(Freq = n())
+dfAirbnbSeattlePrpTyp <- dfAirbnbSeattlePrpTyp %>% filter(property_type %in% c("Apartment","House","Condominium","Townhouse", "Loft"))
+dfAirbnbSeattlePrpTyp <- dfAirbnbSeattlePrpTyp %>% filter (neighbourhood %in% c("Capitol Hill","Queen Anne","Belltown","First Hill"))
+dfAirbnbSeattleSpcPrp<-  dfAirbnbTrainSeattle %>% filter(property_type %in% c("Apartment","House","Condominium","Townhouse", "Loft"))%>% group_by(neighbourhood) %>% summarize(sum = n())
+propertyratio <- merge(dfAirbnbSeattlePrpTyp, dfAirbnbSeattleSpcPrp, by="neighbourhood")
+propertyratio <- propertyratio %>% mutate(ratio = Freq/sum)
+ggplot(propertyratio, aes(x=neighbourhood, y=ratio, fill = property_type)) +
+  geom_bar(position = "dodge",stat="identity") + 
+  scale_fill_discrete(name = "Property Type") + 
+  scale_y_continuous(labels = scales::percent) +
+  ggtitle("Which property type is listed the most in Seattle?",
+          subtitle = "Property Types in Top Neighborhoods in Seattle ") +
+          theme(plot.title = element_text(face = "bold")) +
+          theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+          theme(plot.caption = element_text(color = "grey68"))+scale_color_gradient(low="#d3cbcb", high="#852eaa")+
+          scale_fill_manual("Property Type", values=c("#e06f69","#357b8a", "#7db5b8", "#59c6f3", "#f6c458")) +
+          xlab("Neighborhood") + ylab("Percentage of the Property type")
+```
+
+### In top neighborhoods the property type which are listed the most are Apartments and Houses.In capitol Hill which has a variety of property types to be rented ~65 %of the listed  properties are Apartments.
+
+
+```{r} 
+# what is the contribution of proerty_type on high booking rate
+ dfAirbnbTrainSeattle %>%
+  group_by(property_type) %>%
+  filter(high_booking_rate==1)%>%
+  tally()%>% 
+  mutate(pct = 100*n/sum(n)) %>% 
+  arrange(desc(pct))
+
+```
+
+### Apartments and Houses contribute  ~60 % to high booking rate, wheres condos only contribute ~4%.It confirms with our research for initial acquisition of homes For Property type if one  want to run an Airbnb “hotel” it is advisable to buy a house or apartments since almost all condo buildings in Seattle prohibit this type of rental.The advantage of single-family homes is that they generally charge much more in rent and the tenants may stay for multiple years.
+
+
+
+
+##* Results and Findings:*
+
+
+### It’s a great time to invest in the Seattle housing market based on our research as real estate properties are selling at the market price which is a good sign for Seattle real estate investors. Home prices in Seattle will fall.The city is shifting toward the “neutral” territory.
+###Seattle is also a bustling city for **business**,the surrounding suburbs *house eight Fortune 500 companies* including Amazon, Nordstrom, Microsoft, and Starbucks. Other large companies include MSNBC, Costco, Capital One Investing, and T-Mobile.*Amazon HQ2* has effected the Seattle Housing Market,the median home price in the Seattle housing market shot up.*Home prices in the metro area went up 47%* which is nearly twice as high as the national increase of 24%.
+###After *Washington State outlawed rent control*,the Market is friendly for Landlords as the rents can be raised to keep up with inflation and demand.
+###We would $recommend$ according to our findings to invest in or near **Capitol Hill** and $University District$ for steady income. To invest in **Apartment or House**. And Finally, to list the property with airbnb during Nov or December[as also obtained in analysis] to *leverage the popular times* of Jan_apr and most importantly Jun-September when most of the tourists visit Settle for varoius festivals and events like Seattle International Film Festival (May-June),Capitol Hill Block Party (July),Bumbershoot (September). 
+###Most of the tourist return year round and therefore Airbnb platform can be used during these periods for network effects and to create a loyal customer base. 
+
+
+
+
+### *PREDICTIVE ANALYSIS *
+
+###Reloading dataset since some changes to the data types need to be made to run our models. 
+###We are going to run xgBoost, GLM and Knn for High booking rate for Seattle. 
+
+```{r}
+airbnbSeattleTrain<- dfAirbnbTrainSeattle
+airbnbSeattleTest <- dfAirbnbTestSeattle
+
+
+```
+
+```{r}
+dfTrain <- airbnbSeattleTrain %>% sample_frac(.80)
+dfValid <- setdiff(airbnbSeattleTrain, dfTrain)
+```
+
+```{r}
+dfTrainHbr <- dfAirbnbTrainSeattle %>% sample_frac(.80)
+dfValidHbr <- setdiff(dfAirbnbTrainSeattle, dfTrainHbr)
+```
+
+
+
+### Running GLM on High_booking_rate to see statistiacally significant variables that high_booking_rate depends on.
+
+
+```{r}
+logModHbr <- glm(high_booking_rate~  bathrooms + bed_type + bedrooms + bed_type + price +
+              host_identity_verified + host_is_superhost + host_listings_count + maximum_nights +
+               minimum_nights + host_verification_count + host_age + amenities_count, data = dfTrainHbr, family = 'binomial')
+summary(logModHbr)
+```
+
+### We then used the statistically significant variables in our models. Our xGboost model gave us the best accuracy. 
+
+```{r}
+logPredsHbr = predict(logModHbr, newdata = dfValidHbr, type = 'response')
+
+classHbrGlm<- dfValidHbr%>% 
+mutate(predictedHbrGlm = as.factor(ifelse(logPredsHbr > 0.5, 1, 0)))
+#classHbrGlm
+
+classHbrGlm$high_booking_rate<-as.factor(classHbrGlm$high_booking_rate)
+```
+
+```{r}
+classHbrGlm %>% 
+  xtabs(~predictedHbrGlm+high_booking_rate, .) %>% 
+  confusionMatrix(positive='1')
+```
+
+### xgBoost model 
+
+```{r}
+
+dropCols <- c("weekly_price","id","zipcode","host_acceptance_rate","host_has_profile_pic","square_feet","latitude","longitude","require_guest_phone_verification","require_guest_profile_picture","space","state","transit","monthly_price","access","city","description","interaction","neighborhood_overview","host_about","host_location","host_neighbourhood","host_response_rate","host_response_time","host_since","host_verifications","house_rules","notes","is_location_exact","market","requires_license", "review_scores_accuracy","review_scores_checkin","review_scores_cleanliness","review_scores_communication","review_scores_location","review_scores_rating","review_scores_value","host_listings_count", "is_business_travel_ready","availability_30","availability_60","availability_90","amenities","neighbourhood")
+
+
+airbnbSeattleTrain <- airbnbSeattleTrain %>% select(- (dropCols))
+airbnbSeattleTest <- airbnbSeattleTest %>% select(-(dropCols))
+
+```
+
+### Changing datatype to numeric to run xgBoost for Train 
+```{r}
+airbnbSeattleTrain$extra_people <- as.numeric(gsub('\\$|,', '', airbnbSeattleTrain$extra_people))
+airbnbSeattleTrain$price <- as.numeric(gsub('\\$|,', '', airbnbSeattleTrain$price))
+airbnbSeattleTrain$security_deposit <- as.numeric(gsub('\\$|,', '', airbnbSeattleTrain$security_deposit))
+airbnbSeattleTrain$cleaning_fee <- as.numeric(gsub('\\$|,', '', airbnbSeattleTrain$cleaning_fee))
+
+airbnbSeattleTest$extra_people <- as.numeric(gsub('\\$|,', '', airbnbSeattleTest$extra_people))
+airbnbSeattleTest$price <- as.numeric(gsub('\\$|,', '', airbnbSeattleTest$price))
+airbnbSeattleTest$security_deposit <- as.numeric(gsub('\\$|,', '', airbnbSeattleTest$security_deposit))
+airbnbSeattleTest$cleaning_fee <- as.numeric(gsub('\\$|,', '', airbnbSeattleTest$cleaning_fee))
+
+```
+
+```{r}
+airbnbSeattleTrain <- airbnbSeattleTrain %>% 
+                      mutate(cleaning_fee = as.numeric(str_replace_all(airbnbSeattleTrain$cleaning_fee,"[$,]",'')))
+
+meanCleaningFee <- mean(airbnbSeattleTrain$cleaning_fee, na.rm = TRUE)
+
+airbnbSeattleTrain <- airbnbSeattleTrain %>%
+                    mutate(cleaning_fee = replace_na(cleaning_fee, meanCleaningFee))
+
+
+airbnbSeattleTest <- airbnbSeattleTest %>% 
+                      mutate(cleaning_fee = as.numeric(str_replace_all(airbnbSeattleTest$cleaning_fee,"[$,]",'')))
+
+meanCleaningFee <- mean(airbnbSeattleTest$cleaning_fee, na.rm = TRUE)
+
+airbnbSeattleTest <- airbnbSeattleTest %>%
+                    mutate(cleaning_fee = replace_na(cleaning_fee, meanCleaningFee))
+```
+
+```{r}
+airbnbSeattleTrain <- airbnbSeattleTrain %>% 
+                      mutate(extra_people = as.numeric(str_replace_all(airbnbSeattleTrain$extra_people,"[$,]",'')))
+
+airbnbSeattleTest <- airbnbSeattleTest %>% 
+                      mutate(extra_people = as.numeric(str_replace_all(airbnbSeattleTest$extra_people,"[$,]",'')))
+```
+
+```{r}
+airbnbSeattleTrain <- airbnbSeattleTrain %>% 
+                      mutate(price = as.numeric(str_replace_all(airbnbSeattleTrain$price,"[$,]",'')))
+
+meanPrice <- mean(airbnbSeattleTrain$price, na.rm = TRUE)
+
+airbnbSeattleTrain <- airbnbSeattleTrain %>%
+                    mutate(price = replace_na(price, meanPrice))
+
+
+airbnbSeattleTest <- airbnbSeattleTest %>% 
+                      mutate(price = as.numeric(str_replace_all(airbnbSeattleTest$price,"[$,]",'')))
+
+meanPrice <- mean(airbnbSeattleTest$price, na.rm = TRUE)
+
+airbnbSeattleTest <- airbnbSeattleTest %>%
+                    mutate(price = replace_na(price, meanPrice))
+```
+
+```{r}
+airbnbSeattleTrain$security_deposit <- ifelse(is.na(airbnbSeattleTrain$security_deposit),0,airbnbSeattleTrain$security_deposit)
+airbnbSeattleTest$security_deposit <- ifelse(is.na(airbnbSeattleTest$security_deposit),0,airbnbSeattleTest$security_deposit)
+```
+
+```{r}
+#Mean = 1.36
+airbnbSeattleTrain$bedrooms <- as.numeric(airbnbSeattleTrain$bedrooms)
+airbnbSeattleTrain$bedrooms[is.na(airbnbSeattleTrain$bedrooms)] <- 3.5
+summary(airbnbSeattleTrain$bedrooms)
+table(airbnbSeattleTrain$bedrooms)
+
+airbnbSeattleTest$bedrooms <- as.numeric(airbnbSeattleTest$bedrooms)
+airbnbSeattleTest$bedrooms[is.na(airbnbSeattleTest$bedrooms)] <- 3.5
+
+```
+
+```{r}
+airbnbSeattleTrain$beds = ifelse(is.na(airbnbSeattleTrain$beds), ave(airbnbSeattleTrain$beds, FUN = function(x) median(x, na.rm = TRUE)), airbnbSeattleTrain$beds)
+
+airbnbSeattleTest$beds = ifelse(is.na(airbnbSeattleTest$beds), ave(airbnbSeattleTest$beds, FUN = function(x) median(x, na.rm = TRUE)), airbnbSeattleTest$beds)
+
+```
+
+```{r}
+airbnbSeattleTrain$bathrooms = ifelse(is.na(airbnbSeattleTrain$bathrooms), ave(airbnbSeattleTrain$bathrooms, FUN = function(x) median(x, na.rm = TRUE)), airbnbSeattleTrain$bathrooms)
+
+airbnbSeattleTest$bathrooms = ifelse(is.na(airbnbSeattleTest$bathrooms), ave(airbnbSeattleTest$bathrooms, FUN = function(x) median(x, na.rm = TRUE)), airbnbSeattleTest$bathrooms)
+
+```
+
+```{r}
+airbnbSeattleTrain$host_identity_verified = ifelse(is.na(airbnbSeattleTrain$host_identity_verified),FALSE, airbnbSeattleTrain$host_identity_verified)
+
+airbnbSeattleTest$host_identity_verified = ifelse(is.na(airbnbSeattleTest$host_identity_verified),FALSE, airbnbSeattleTest$host_identity_verified)
+
+```
+
+```{r}
+airbnbSeattleTrain$host_is_superhost = ifelse(is.na(airbnbSeattleTrain$host_is_superhost),FALSE, airbnbSeattleTrain$host_is_superhost)
+
+airbnbSeattleTest$host_is_superhost = ifelse(is.na(airbnbSeattleTest$host_is_superhost),FALSE, airbnbSeattleTest$host_is_superhost)
+```
+
+```{r}
+airbnbSeattleTrain$high_booking_rate <- as.factor(airbnbSeattleTrain$high_booking_rate)
+airbnbSeattleTrain$cancellation_policy <- as.numeric(airbnbSeattleTrain$cancellation_policy)
+airbnbSeattleTest$cancellation_policy <- as.numeric(airbnbSeattleTest$cancellation_policy)
+airbnbSeattleTrain$room_type <- as.numeric(airbnbSeattleTrain$room_type)
+airbnbSeattleTest$room_type <- as.numeric(airbnbSeattleTest$room_type)
+airbnbSeattleTrain$bed_type <- as.numeric(airbnbSeattleTrain$bed_type)
+airbnbSeattleTest$bed_type <- as.numeric(airbnbSeattleTest$bed_type)
+airbnbSeattleTrain$property_type <- as.numeric(airbnbSeattleTrain$property_type)
+airbnbSeattleTest$property_type <- as.numeric(airbnbSeattleTest$property_type)
+
+airbnbSeattleTrain$instant_bookable <- as.numeric(airbnbSeattleTrain$instant_bookable)
+airbnbSeattleTest$instant_bookable <- as.numeric(airbnbSeattleTest$instant_bookable)
+airbnbSeattleTrain$host_identity_verified <- as.numeric(airbnbSeattleTrain$host_identity_verified)
+airbnbSeattleTest$host_identity_verified <- as.numeric(airbnbSeattleTest$host_identity_verified)
+airbnbSeattleTrain$host_is_superhost <- as.numeric(airbnbSeattleTrain$host_is_superhost)
+airbnbSeattleTest$host_is_superhost <- as.numeric(airbnbSeattleTest$host_is_superhost)
+
+```
+
+### Running the xgBoost model
+
+
+
+```{r}
+install.packages("xgboost")
+library("xgboost")
+set.seed(123)
+
+X_train = xgb.DMatrix(as.matrix(dfTrain %>% select(-(high_booking_rate))))
+Y_train = dfTrain$high_booking_rate
+
+```
+
+```{r}
+set.seed(123)
+
+X_test = xgb.DMatrix(as.matrix(dfValid %>% select(-high_booking_rate)))
+Y_test = dfValid$high_booking_rate
+```
+
+```{r}
+xgb_trcontrol = trainControl(
+  method = "cv",
+  number = 10,  
+  allowParallel = TRUE,
+  verboseIter = FALSE,
+  returnData = FALSE
+)
+```
+
+```{r}
+xgbGrid <- expand.grid(nrounds = c(100,200),  
+                       max_depth = c(10, 15, 20, 25),
+                       colsample_bytree = seq(0.5, 0.9, length.out = 5),
+                       eta = 0.1,
+                       gamma=0,
+                       min_child_weight = 1,
+                       subsample = 1
+                      )
+```
+
+```{r}
+install.packages("e1071")
+library(e1071)
+xgb_model = train(
+  X_train, Y_train,  
+  trControl = xgb_trcontrol,
+  tuneGrid = xgbGrid,
+  method = "xgbTree"
+)
+```
+
+```{r}
+resultsXg <-
+  xgb_model %>%
+    predict(X_test, type= 'prob') %>% 
+  bind_cols(dfValid,predictedClass=.)
+resultsXg
+
+names(resultsXg)[23] <- "predictedClass"
+
+#resultsXg$predictedClass<- as.numeric(resultsXg$predictedClass)
+
+resultsXg = resultsXg %>% mutate(predictedHbr = as.factor(ifelse(predictedClass > 0.6, 1, 0)))
+
+resultsXg
+```
+
+```{r}
+resultsXg %>% 
+  xtabs(~predictedHbr+high_booking_rate, .) %>% 
+  confusionMatrix(positive='1')
+```
+
+### We see the specificity and sensitivty are high. We have a good model here to predict high booking rate. Investor can use this model and see if their listings will have a good booking rate or not. 
+
+
+### RANDOM FOREST
+
+```{r}
+rfModHbr <- randomForest(high_booking_rate~ accommodates + availability_365 + availability_60 + 
+                      bathrooms + availability_90+ availability_30  + bedrooms + bed_type + 
+                        host_identity_verified + host_is_superhost +
+                        host_listings_count + maximum_nights +
+               minimum_nights + amenities_count + host_verification_count + host_age  + price + guests_included + extra_people + property_type + instant_bookable + cancellation_policy + is_location_exact + requires_license + cleaning_fee + security_deposit,
+                      data=dfTrainHbr,
+                      mtry=3,
+                      ntree=1000,
+                      importance=TRUE, na.action = na.rm)
+```
+
+### Adjusting the levels for predictions 
+
+```{r}
+levels(dfValidHbr$bed_type) <- levels(dfTrainHbr$bed_type)
+levels(dfValidHbr$host_identity_verified) <- levels(dfTrainHbr$host_identity_verified)
+levels(dfValidHbr$host_is_superhost) <- levels(dfTrainHbr$host_is_superhost)
+levels(dfValidHbr$instant_bookable) <- levels(dfTrainHbr$instant_bookable)
+levels(dfValidHbr$is_location_exact) <- levels(dfTrainHbr$is_location_exact)
+levels(dfValidHbr$property_type) <- levels(dfTrainHbr$property_type)
+levels(dfValidHbr$requires_license) <- levels(dfTrainHbr$requires_license)
+levels(dfValidHbr$availability_365) <- levels(dfTrainHbr$availability_365)
+levels(dfValidHbr$bathrooms) <- levels(dfTrainHbr$bathrooms)
+levels(dfValidHbr$host_listings_count) <- levels(dfTrainHbr$host_listings_count)
+levels(dfValidHbr$minimum_nights) <- levels(dfTrainHbr$minimum_nights)
+levels(dfValidHbr$amenities_count) <- levels(dfTrainHbr$amenities_count)
+levels(dfValidHbr$host_verification_count) <- levels(dfTrainHbr$host_verification_count)
+levels(dfValidHbr$accommodates) <- levels(dfTrainHbr$accommodates)
+levels(dfValidHbr$host_age) <- levels(dfTrainHbr$host_age)
+levels(dfValidHbr$host_has_profile_pic) <- levels(dfTrainHbr$host_has_profile_pic)
+levels(dfValidHbr$security_deposit) <- levels(dfTrainHbr$security_deposit)
+levels(dfValidHbr$host_verification_count ) <- levels(dfTrainHbr$host_verification_count )
+levels(dfValidHbr$bedrooms) <- levels(dfTrainHbr$bedrooms)
+levels(dfValidHbr$beds) <- levels(dfTrainHbr$beds)
+levels(dfValidHbr$room_type) <- levels(dfTrainHbr$room_type)
+levels(dfValidHbr$cleaning_fee) <- levels(dfTrainHbr$cleaning_fee)
+levels(dfValidHbr$cancellation_policy) <- levels(dfTrainHbr$cancellation_policy)
+levels(dfValidHbr$guests_included) <- levels(dfTrainHbr$guests_included)
+levels(dfValidHbr$host_response_time) <- levels(dfTrainHbr$host_response_time)
+levels(dfValidHbr$extra_people) <- levels(dfTrainHbr$extra_people)
+levels(dfValidHbr$price) <- levels(dfTrainHbr$price)
+levels(dfValidHbr$require_guest_phone_verification)<-levels(dfTrainHbr$require_guest_phone_verification)
+levels(dfValidHbr$require_guest_profile_picture)<-levels(dfTrainHbr$require_guest_profile_picture)
+levels(dfValidHbr$extra_people) <- levels(dfTrainHbr$extra_people)
+
+```
+
+```{r}
+resultsRf <-  
+  rfModHbr %>% 
+  predict(dfValidHbr, type='response') %>%
+  bind_cols(dfValidHbr, predictedHbrRf=.)
+```
+
+
+
+### kNN model
+
+```{r}
+fitKNNHbr <- train(high_booking_rate~ availability_365 + bathrooms + bedrooms + bed_type +
+             host_identity_verified + host_is_superhost + host_listings_count  +
+              minimum_nights + amenities_count + host_verification_count + host_age + cleaning_fee, method='knn', data=dfTrainHbr, trControl=trainControl(method='cv', number=10), preProcess = c("center", "scale"), tuneLength = 30, na.action=na.roughfix)
+```
+
+```{r}
+resultsKnn <-  
+  fitKNNHbr %>% 
+  predict(dfValidHbr, type='prob') %>%
+  bind_cols(dfValidHbr, predictedKnnHbr=.)
+
+resultsKnn
+
+resultsKnn$predictedKnnHbr<- as.numeric(resultsKnn$predictedKnnHbr)
+
+names(resultsKnn)[70]<-"predictedKnnHbr"
+```
+
+```{r}
+classHbrKnn = resultsKnn %>% 
+mutate(predictedKnnHbr = as.factor(ifelse(predictedKnnHbr > 0.6, 1, 0)))
+
+classHbrKnn
+
+classHbrKnn$high_booking_rate<-as.factor(classHbrKnn$predictedK)
+```
+
+```{r}
+classHbrKnn %>% 
+  xtabs(~predictedKnnHbr+high_booking_rate, .) %>% 
+  confusionMatrix(positive='1')
+```
+
+
+##Conclusion and Discussion
+
+###Findings
+####1. Belltown was the neighbourhood with the highest listings.
+####2. Capitol Hill was the neighbourhood which had the most expensive as well as the least expensive properties.
+####3. Apartments were the most common property type in Seattle.
+####4. The spread of properties was almost consistant across the whole state. There is a little higher concentration in central Seattle compared to the rest of the state.
+####5. Restaurants were the most common attraction in a neihbourhood.
+####6. Bus was the most popular type of transit.
+####7. Wifi, Shampoo, Essentials and Kitchens were the most common amenities.
+
+###Future Research
+####1. If the data that is gathered and has less NA values, we can give more accurate recommendations with the help of the models we run.
+####2. If seasonality can be added to the data, it will help us greatly in future predictions.
+####3. If we have a column for the periods of time the properties are accupied, it can help do better EDA to present to the investors.
+####4. If we have some additional parameters we can calculate the time required to break-even on the investment. This will help build a strong case for investors.
+
+###Limitations
+####1. The data scraped for this research was not clean and there were a lot of missing values due to which we had to remove all the NA values which led to the analysis being skewed.
+####2. We had difficulties in merging with other data sets to do a more in-depth analysis.
+####3.  We were unable to get reviews of the users. The reviews provided by the owners would be biased in their favor and could not give us the correct picture.
+
+
+
+##REFERENCES
+
+###http://insideairbnb.com/seattle/ 
+###https://www.mashvisor.com/blog/airbnb-profit-calculator-guide/
+###https://www.mashvisor.com/blog/invest-airbnb-seattle-2018/
+###https://medium.com/datadriveninvestor/a-closer-look-into-the-data-of-seattles-airbnb-market-d9812ea863f5
+###https://medium.com/@sarah.alsalman96/seattle-airbnb-data-analysis-982add28d731
+###https://santorinidave.com/best-time-to-visit-seattle(https://jinglescode.github.io/datascience/2019/07/13/airbnb-in-seattle-data-analysis/
+
+
